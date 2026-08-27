@@ -1,0 +1,19 @@
+{
+  "name": "microcredito-p1",
+  "version": "1.0.0",
+  "description": "Núcleo de dominio del Sistema de Gestión de Microcrédito",
+  "type": "module",
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "build": "tsc"
+  },
+  "dependencies": {
+    "decimal.js": "^10.6.0"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "typescript": "^5.9.0",
+    "vitest": "^3.2.0"
+  }
+}
