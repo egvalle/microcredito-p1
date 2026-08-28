@@ -64,11 +64,16 @@ describe("ClasificadorMora", () => {
         ).toBe("VENCIDO");
     });
 
-    it("debe clasificar más de 120 días como incobrable", () => {
+    it("debe rechazar la clasificación por tramo cuando supera 120 días", () => {
 
-        expect(
-            clasificador.clasificar(121)
-        ).toBe("INCOBRABLE");
+        const clasificador =
+            new ClasificadorMora();
+
+        expect(() => {
+            clasificador.clasificar(121);
+        }).toThrow(
+            "Un crédito con más de 120 días de atraso debe gestionarse como incobrable"
+        );
     });
 
     it("debe permitir que el tramo disminuya al reducir los días de atraso", () => {

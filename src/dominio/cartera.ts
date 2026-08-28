@@ -6,8 +6,7 @@ export type TramoMora =
     | "MORA_1"
     | "MORA_2"
     | "MORA_3"
-    | "VENCIDO"
-    | "INCOBRABLE";
+    | "VENCIDO";
 
 export interface EspecificacionTramoMora {
     cumple(diasAtraso: number): boolean;
@@ -62,18 +61,6 @@ class VencidoSpecification
     }
 }
 
-class IncobrableSpecification
-    implements EspecificacionTramoMora {
-
-    public cumple(diasAtraso: number): boolean {
-        return diasAtraso > 120;
-    }
-
-    public obtenerTramo(): TramoMora {
-        return "INCOBRABLE";
-    }
-}
-
 export class ClasificadorMora {
 
     private readonly especificaciones:
@@ -84,19 +71,21 @@ export class ClasificadorMora {
             new Mora1Specification(),
             new Mora2Specification(),
             new Mora3Specification(),
-            new VencidoSpecification(),
-            new IncobrableSpecification()
+            new VencidoSpecification()
         ];
     }
 
-    public clasificar(
-        diasAtraso: number
-    ): TramoMora {
-
+    public clasificar(diasAtraso: number): TramoMora {
         this.validarDias(diasAtraso);
 
         if (diasAtraso === 0) {
             return "SIN_MORA";
+        }
+
+        if (diasAtraso > 120) {
+            throw new Error(
+                "Un crédito con más de 120 días de atraso debe gestionarse como incobrable"
+            );
         }
 
         const especificacion =
