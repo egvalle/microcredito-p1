@@ -3,12 +3,7 @@ info:
   title: API - Sistema de Gestión de Microcrédito (Crédito Vecino, S.A.)
   version: "1.0.0"
   description: >
-    Contrato de la API (E5) del Proyecto 1. Especifica los recursos que
-    expondrán los adaptadores primarios (API REST, y en el Proyecto Final
-    también el Chat/RAG y el servidor MCP) hacia los casos de uso del
-    dominio. Este documento NO implica un servidor implementado: es solo
-    el contrato, validado en Swagger Editor. El dominio permanece
-    independiente de HTTP (arquitectura hexagonal, ver Parte F).
+    Contrato de la API (E5) del Proyecto 1.
   contact:
     name: Crédito Vecino, S.A. - Equipo de desarrollo
 
@@ -24,12 +19,8 @@ tags:
   - name: Cierres
   - name: CarteraEnRiesgo
 
-# ---------------------------------------------------------------------
-# PATHS
-# ---------------------------------------------------------------------
 paths:
 
-  # ---------------- CLIENTES ----------------
   /clientes:
     post:
       tags: [Clientes]
@@ -87,7 +78,6 @@ paths:
         '404':
           $ref: '#/components/responses/ErrorNotFound'
 
-  # ---------------- SOLICITUDES ----------------
   /solicitudes:
     post:
       tags: [Solicitudes]
@@ -159,9 +149,7 @@ paths:
       operationId: aprobarSolicitud
       summary: Aprobar solicitud
       description: >
-        Caso de uso "Aprobar solicitud" (incluye la evaluación contra la
-        política de crédito vigente). Requiere autorización del Comité
-        de crédito. Transición de estado: SOLICITADO → APROBADO.
+        Caso de uso "Aprobar solicitud" Transición de estado: SOLICITADO → APROBADO.
       parameters:
         - $ref: '#/components/parameters/SolicitudIdPath'
       requestBody:
@@ -184,7 +172,7 @@ paths:
         '409':
           description: >
             La solicitud no está en un estado que permita aprobarla
-            (transición inválida; patrón State del dominio).
+            transición inválida
           content:
             application/json:
               schema:
@@ -229,18 +217,14 @@ paths:
         '409':
           $ref: '#/components/responses/ErrorTransicionInvalida'
 
-  # ---------------- CREDITOS ----------------
   /creditos/{id}/desembolso:
     post:
       tags: [Creditos]
       operationId: desembolsarCredito
       summary: Desembolsar crédito
       description: >
-        {id} es el id de la SOLICITUD aprobada. Este caso de uso genera
-        el plan de amortización (sistema francés, sección 6.4) y crea el
-        recurso Credito. Transición: APROBADO → DESEMBOLSADO → VIGENTE.
-        La política financiera aplicada es la vigente en la fecha de
-        desembolso (tasas versionadas, nunca constantes en código).
+        {id} es el id de la SOLICITUD aprobada. 
+        Transición: APROBADO → DESEMBOLSADO → VIGENTE.      
       parameters:
         - $ref: '#/components/parameters/SolicitudIdPath'
       requestBody:
@@ -351,10 +335,7 @@ paths:
       operationId: registrarPago
       summary: Registrar pago
       description: >
-        Caso de uso "Registrar pago", independiente del canal de origen
-        (empleado de cobros hoy; transferencia, cajero, pasarela o
-        integración bancaria en el futuro — todos invocan este mismo
-        caso de uso). Aplica la prelación obligatoria: gastos →
+        Caso de uso Registrar pago: gastos →
         interés moratorio → interés corriente → capital (sección 6.6).
         Requiere idempotencia (ver Idempotency-Key abajo).
       parameters:
@@ -489,7 +470,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorEnvelope'
 
-  # ---------------- CIERRES ----------------
+
   /cierres/diarios:
     post:
       tags: [Cierres]
@@ -563,7 +544,7 @@ paths:
         '400':
           $ref: '#/components/responses/ErrorBadRequest'
 
-  # ---------------- CARTERA EN RIESGO ----------------
+
   /cartera/riesgo:
     get:
       tags: [CarteraEnRiesgo]
@@ -571,10 +552,7 @@ paths:
       summary: Consultar cartera en riesgo
       description: >
         Cuenta como en riesgo todo crédito con más de 30 días de
-        atraso, más los reestructurados (aunque estén al día). Los
-        incobrables quedan fuera de la cartera activa. Se reporta
-        siempre junto con lo dado por incobrable en el período, para
-        que declarar incobrables no "maquille" el indicador (sección 6.8).
+        atraso. Los incobrables quedan fuera de la cartera activa.
       parameters:
         - name: fechaCorte
           in: query
@@ -592,9 +570,7 @@ paths:
         '400':
           $ref: '#/components/responses/ErrorBadRequest'
 
-# ---------------------------------------------------------------------
-# COMPONENTS
-# ---------------------------------------------------------------------
+
 components:
 
   parameters:
@@ -626,20 +602,6 @@ components:
     IdempotencyKey:
       description: >
         Clave de idempotencia para POST /creditos/{id}/pagos.
-
-        - Formato esperado: UUID v4, generado por el cliente (el
-          asesor de cobros, o el canal externo) antes de enviar el pago.
-        - Dónde se envía: header HTTP `Idempotency-Key` (obligatorio).
-        - Primer intento: el servidor procesa el pago normalmente,
-          guarda el par (Idempotency-Key, resultado) y responde 201.
-        - Reintento con la MISMA clave y el MISMO cuerpo de solicitud:
-          el servidor NO vuelve a aplicar el pago; responde 200 con
-          el resultado ya guardado la primera vez.
-        - Reintento con la MISMA clave pero un cuerpo DISTINTO
-          (distinto monto, fecha o crédito): se rechaza con 409
-          Conflict y el código IDEMPOTENCY_KEY_REUTILIZADA, porque
-          reutilizar la clave con datos distintos indica un error del
-          cliente, no un reintento legítimo.
       schema:
         type: string
         format: uuid
@@ -670,7 +632,7 @@ components:
 
   schemas:
 
-    # ---- Error uniforme ----
+    # Error uniforme
     ErrorEnvelope:
       type: object
       required: [error]
@@ -696,7 +658,7 @@ components:
                 type: object
                 additionalProperties: true
 
-    # ---- Dinero ----
+ 
     Dinero:
       type: object
       description: >
@@ -716,7 +678,7 @@ components:
           enum: [GTQ]
           description: Fijo en GTQ para este proyecto; se deja como enum para permitir extensión futura.
 
-    # ---- Cliente ----
+
     ClienteInput:
       type: object
       required: [nombreCompleto, identificacion, telefono, direccion]
@@ -745,7 +707,7 @@ components:
               type: string
               format: date-time
 
-    # ---- Estados y tramos ----
+
     EstadoCredito:
       type: string
       description: >
@@ -769,7 +731,7 @@ components:
       description: Clasificación derivada de los días de atraso. NO es un estado.
       enum: [SIN_MORA, MORA_1, MORA_2, MORA_3, VENCIDO]
 
-    # ---- Solicitud ----
+
     SolicitudCreditoInput:
       type: object
       required: [clienteId, montoSolicitado, plazoMeses, motivo]
@@ -809,7 +771,7 @@ components:
               format: uuid
               description: Presente solo una vez desembolsada la solicitud.
 
-    # ---- Crédito ----
+
     Credito:
       type: object
       required:
@@ -877,7 +839,7 @@ components:
         motivo:
           type: string
 
-    # ---- Plan de amortización ----
+
     Cuota:
       type: object
       required: [numero, fechaVencimiento, saldoInicial, montoCuota, interesCorriente, amortizacionCapital, saldoFinal]
@@ -910,7 +872,6 @@ components:
           items:
             $ref: '#/components/schemas/Cuota'
 
-    # ---- Pagos ----
     PagoInput:
       type: object
       required: [monto, fechaPago]
@@ -991,7 +952,6 @@ components:
         descripcion:
           type: string
 
-    # ---- Cierres ----
     Cierre:
       type: object
       required: [id, fechaCorte, tipo, saldoCartera, montoEnRiesgo, porcentajeRiesgo, montoIncobrablePeriodo]
@@ -1016,7 +976,7 @@ components:
         montoIncobrablePeriodo:
           $ref: '#/components/schemas/Dinero'
 
-    # ---- Cartera en riesgo ----
+
     CarteraEnRiesgo:
       type: object
       required: [fechaCorte, carteraActiva, carteraEnRiesgo, porcentajeEnRiesgo, montoIncobrablePeriodo]
