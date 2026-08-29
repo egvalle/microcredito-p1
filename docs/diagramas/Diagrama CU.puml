@@ -1,0 +1,92 @@
+@startuml
+left to right direction
+
+skinparam packageStyle rectangle
+skinparam shadowing false
+
+actor Cliente
+actor "Asesor de crédito" as Asesor
+actor "Comité de crédito" as Comite
+actor "Empleado de cobros" as Cobros
+actor "Canal de pago externo" as CanalPago
+actor "Analista / Encargado de cierres" as Analista
+actor Gerencia
+
+rectangle "Sistema de Gestión de Microcrédito" {
+
+    usecase "Registrar cliente" as UC1
+    usecase "Consultar cliente" as UC2
+
+    usecase "Solicitar crédito" as UC3
+    usecase "Evaluar solicitud\nde crédito" as UC4
+    usecase "Aprobar solicitud" as UC5
+    usecase "Rechazar solicitud" as UC6
+
+    usecase "Desembolsar crédito" as UC7
+    usecase "Generar plan de\namortización" as UC8
+
+    usecase "Registrar pago" as UC9
+    usecase "Aplicar prelación\nde pago" as UC10
+    usecase "Calcular interés\nmoratorio" as UC11
+    usecase "Clasificar tramo\nde mora" as UC12
+
+    usecase "Consultar crédito" as UC13
+    usecase "Consultar saldo" as UC14
+
+    usecase "Generar cierre diario" as UC15
+    usecase "Generar cierre mensual" as UC16
+
+    usecase "Calcular cartera\nen riesgo" as UC17
+    usecase "Consultar cartera\nen riesgo" as UC18
+
+    usecase "Reestructurar crédito" as UC19
+    usecase "Declarar crédito\nincobrable" as UC20
+}
+
+' =========================
+' Relaciones de actores
+' =========================
+
+Cliente -- UC3
+Cliente -- UC13
+Cliente -- UC14
+
+Asesor -- UC1
+Asesor -- UC2
+Asesor -- UC3
+Asesor -- UC4
+Asesor -- UC13
+
+Comite -- UC5
+Comite -- UC6
+Comite -- UC19
+
+Cobros -- UC9
+Cobros -- UC14
+
+CanalPago -- UC9
+
+Analista -- UC15
+Analista -- UC16
+Analista -- UC17
+Analista -- UC20
+
+Gerencia -- UC18
+
+' =========================
+' Relaciones entre casos
+' =========================
+
+UC5 .> UC4 : <<include>>
+UC6 .> UC4 : <<include>>
+
+UC7 .> UC8 : <<include>>
+
+UC9 .> UC10 : <<include>>
+UC9 .> UC11 : <<include>>
+UC9 .> UC12 : <<include>>
+
+UC16 .> UC17 : <<include>>
+UC18 .> UC17 : <<include>>
+
+@enduml

@@ -1,0 +1,133 @@
+@startuml
+
+title Diagrama de Secuencia - Aprobar y Desembolsar Crédito
+
+skinparam shadowing false
+skinparam sequenceMessageAlign center
+skinparam responseMessageBelowArrow true
+
+actor "Comité de crédito" as Comite
+actor "Empleado responsable\ndel desembolso" as Empleado
+
+participant "AprobarSolicitud" as AprobarUC
+participant "RepositorioSolicitudes" as RepoSolicitud
+participant "SolicitudCredito" as Solicitud
+participant "DesembolsarCredito" as DesembolsoUC
+participant "PoliticaCredito" as Politica
+participant "PlanAmortizacion" as Plan
+participant "Credito" as Credito
+participant "Movimiento" as Movimiento
+participant "RepositorioCreditos" as RepoCredito
+
+' =========================
+' APROBACIÓN
+' =========================
+
+Comite -> AprobarUC : aprobarSolicitud(solicitudId)
+
+AprobarUC -> RepoSolicitud : obtenerPorId(solicitudId)
+RepoSolicitud --> AprobarUC : solicitud
+
+AprobarUC -> Solicitud : validarEstado()
+
+alt Solicitud no puede aprobarse
+    Solicitud --> AprobarUC : error
+    AprobarUC --> Comite : aprobación rechazada
+
+else Solicitud válida
+
+    Solicitud --> AprobarUC : válida
+
+    AprobarUC -> Solicitud : validarCumplimientoPolitica()
+
+    alt No cumple política de crédito
+        Solicitud --> AprobarUC : no cumple
+        AprobarUC --> Comite : solicitud no aprobada
+
+    else Cumple política
+
+        Solicitud --> AprobarUC : cumple
+
+        AprobarUC -> Solicitud : aprobar()
+
+        Solicitud -> Solicitud : estado = APROBADA
+
+        AprobarUC -> RepoSolicitud : guardar(solicitud)
+
+        AprobarUC --> Comite : solicitud aprobada
+
+    end
+end
+
+' =========================
+' DESEMBOLSO
+' =========================
+
+Empleado -> DesembolsoUC : desembolsarCredito(solicitudId,\nfechaDesembolso)
+
+DesembolsoUC -> RepoSolicitud : obtenerPorId(solicitudId)
+RepoSolicitud --> DesembolsoUC : solicitud aprobada
+
+DesembolsoUC -> Solicitud : validarPuedeDesembolsarse()
+
+alt Solicitud no aprobada o anulada
+
+    Solicitud --> DesembolsoUC : error
+    DesembolsoUC --> Empleado : desembolso rechazado
+
+else Puede desembolsarse
+
+    Solicitud --> DesembolsoUC : válida
+
+    DesembolsoUC -> Politica : obtenerPoliticaVigente(fechaDesembolso)
+
+    Politica --> DesembolsoUC : tasaNominal,\ntasaMoratoria,\nbaseConteo,\nreglasVigentes
+
+    DesembolsoUC -> Plan : generar(\ncapital,\ntasa,\nplazo)
+
+    activate Plan
+
+    Plan -> Plan : calcular cuota francesa
+
+    loop Por cada cuota
+        Plan -> Plan : calcular interés
+        Plan -> Plan : calcular amortización
+        Plan -> Plan : calcular saldo
+        Plan -> Plan : redondear a centavos
+    end
+
+    Plan -> Plan : ajustar última cuota
+
+    note right of Plan
+        Invariantes:
+
+        Σ amortizaciones = capital
+
+        saldo final = Q0.00
+    end note
+
+    Plan --> DesembolsoUC : plan generado
+
+    deactivate Plan
+
+    DesembolsoUC -> Credito : crearDesdeSolicitud(\nsolicitud,\nplan,\npolitica)
+
+    DesembolsoUC -> Credito : desembolsar(fechaDesembolso)
+
+    Credito -> Credito : estado = DESEMBOLSADO
+
+    DesembolsoUC -> Movimiento : crearMovimientoDesembolso(\ncapital,\nfechaDesembolso)
+
+    DesembolsoUC -> RepoCredito : guardar(credito)
+
+    DesembolsoUC -> Credito : activar()
+
+    Credito -> Credito : estado = VIGENTE
+
+    DesembolsoUC -> RepoCredito : guardar(credito)
+
+    DesembolsoUC --> Empleado : crédito desembolsado\n+ plan de amortización
+
+end
+
+@enduml

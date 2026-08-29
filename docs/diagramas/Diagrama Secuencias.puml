@@ -1,0 +1,94 @@
+@startuml
+
+skinparam shadowing false
+skinparam sequenceMessageAlign center
+skinparam responseMessageBelowArrow true
+
+actor "Empleado de cobros /\nCanal de pago externo" as Actor
+
+participant "RegistrarPago" as CasoUso
+participant "RepositorioCreditos" as Repo
+participant "Credito" as Credito
+participant "CalculadoraMora" as Mora
+participant "PrelacionPago" as Prelacion
+participant "Pago" as Pago
+participant "Movimiento" as Movimiento
+participant "RepositorioPagos" as RepoPago
+
+Actor -> CasoUso : registrarPago(creditoId, monto,\nfechaPago, claveIdempotencia)
+
+CasoUso -> RepoPago : existeClave(claveIdempotencia)
+
+alt Pago duplicado
+    RepoPago --> CasoUso : sí
+    CasoUso --> Actor : devolver resultado anterior
+else Pago nuevo
+
+    RepoPago --> CasoUso : no
+
+    CasoUso -> Repo : obtenerPorId(creditoId)
+    Repo --> CasoUso : credito
+
+    CasoUso -> Credito : validarPuedeRecibirPago()
+
+    alt Estado inválido
+        Credito --> CasoUso : error
+        CasoUso --> Actor : pago rechazado
+    else Estado válido
+
+        Credito --> CasoUso : válido
+
+        CasoUso -> Credito : obtenerCuotasVencidas(fechaPago)
+        Credito --> CasoUso : cuotasVencidas
+
+        CasoUso -> Mora : calcularInteresMoratorio(\ncapitalEnMora,\ntasaMoratoria,\ndiasAtraso)
+        Mora --> CasoUso : interesMoratorio
+
+        CasoUso -> Credito : obtenerInteresCorrientePendiente()
+        Credito --> CasoUso : interesCorriente
+
+        CasoUso -> Credito : obtenerCapitalPendiente()
+        Credito --> CasoUso : capitalPendiente
+
+        CasoUso -> Prelacion : aplicar(\nmontoPago,\ngastos,\ninteresMoratorio,\ninteresCorriente,\ncapitalPendiente)
+
+        activate Prelacion
+
+        Prelacion -> Prelacion : aplicar a gastos
+        Prelacion -> Prelacion : aplicar a interés moratorio
+        Prelacion -> Prelacion : aplicar a interés corriente
+        Prelacion -> Prelacion : aplicar a capital
+
+        Prelacion --> CasoUso : ResultadoAplicacionPago
+
+        deactivate Prelacion
+
+        CasoUso -> Pago : crear(monto, fechaPago,\nclaveIdempotencia,\nresultado)
+
+        CasoUso -> Credito : aplicarResultado(resultado)
+
+        CasoUso -> Movimiento : generarMovimientos(resultado)
+
+        CasoUso -> Credito : recalcularSituacion(fechaPago)
+
+        alt Todo lo vencido fue pagado
+            Credito -> Credito : regularizar()
+            note right of Credito
+              EN_MORA -> VIGENTE
+            end note
+        else Sigue existiendo atraso
+            Credito -> Credito : actualizarDiasAtraso()
+            note right of Credito
+              Permanece EN_MORA.
+              El tramo puede bajar.
+            end note
+        end
+
+        CasoUso -> RepoPago : guardar(Pago)
+        CasoUso -> Repo : guardar(Credito)
+
+        CasoUso --> Actor : pago registrado correctamente
+    end
+end
+
+@enduml

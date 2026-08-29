@@ -1,0 +1,270 @@
+@startuml
+
+skinparam classAttributeIconSize 0
+skinparam shadowing false
+skinparam linetype ortho
+
+' =========================
+' ENUMERACIONES
+' =========================
+
+enum EstadoSolicitud {
+    SOLICITADA
+    APROBADA
+    RECHAZADA
+    ANULADA
+}
+
+enum EstadoCredito {
+    SOLICITADO
+    APROBADO
+    DESEMBOLSADO
+    VIGENTE
+    EN_MORA
+    REESTRUCTURADO
+    CANCELADO
+    INCOBRABLE
+}
+
+enum TramoMora {
+    SIN_MORA
+    MORA_1
+    MORA_2
+    MORA_3
+    VENCIDO
+}
+
+enum TipoMovimiento {
+    DESEMBOLSO
+    PAGO
+    INTERES_CORRIENTE
+    INTERES_MORATORIO
+    GASTO
+    COMISION
+    AMORTIZACION_CAPITAL
+    RECUPERACION_INCOBRABLE
+}
+
+enum TipoCierre {
+    DIARIO
+    MENSUAL
+}
+
+' =========================
+' OBJETO DE VALOR
+' =========================
+
+class Dinero <<Value Object>> {
+    - montoCentavos : bigint
+    - moneda : string
+    + sumar(otro : Dinero) : Dinero
+    + restar(otro : Dinero) : Dinero
+    + multiplicar(factor : decimal) : Dinero
+    + esCero() : boolean
+    + esNegativo() : boolean
+}
+
+note right of Dinero
+Inmutable.
+Nunca usa Number
+para representar dinero.
+end note
+
+' =========================
+' CLIENTE Y SOLICITUD
+' =========================
+
+class Cliente {
+    - id : string
+    - nombreCompleto : string
+    - identificacion : string
+    - telefono : string
+    - direccion : string
+    - fechaRegistro : Date
+}
+
+class SolicitudCredito {
+    - id : string
+    - fechaSolicitud : Date
+    - montoSolicitado : Dinero
+    - plazoMeses : int
+    - estado : EstadoSolicitud
+    - motivo : string
+    + aprobar() : void
+    + rechazar(motivo : string) : void
+    + anular(motivo : string) : void
+}
+
+' =========================
+' CREDITO
+' =========================
+
+class Credito {
+    - id : string
+    - fechaAprobacion : Date
+    - fechaDesembolso : Date
+    - capitalOriginal : Dinero
+    - saldoCapital : Dinero
+    - tasaNominalAnual : decimal
+    - tasaMoratoriaAnual : decimal
+    - plazoMeses : int
+    - estado : EstadoCredito
+    - reestructurado : boolean
+    + desembolsar() : void
+    + registrarPago(pago : Pago) : void
+    + calcularDiasAtraso(fechaCorte : Date) : int
+    + obtenerTramoMora(fechaCorte : Date) : TramoMora
+    + reestructurar() : void
+    + cancelar() : void
+    + declararIncobrable() : void
+}
+
+note right of Credito
+El tramo de mora NO es un estado.
+Se calcula a partir de los días
+de atraso.
+end note
+
+' =========================
+' PLAN Y CUOTAS
+' =========================
+
+class PlanAmortizacion {
+    - id : string
+    - capital : Dinero
+    - tasaPeriodica : decimal
+    - numeroCuotas : int
+    + generar() : List<Cuota>
+    + obtenerSaldoPendiente() : Dinero
+}
+
+class Cuota {
+    - numero : int
+    - fechaVencimiento : Date
+    - saldoInicial : Dinero
+    - montoCuota : Dinero
+    - interesCorriente : Dinero
+    - amortizacionCapital : Dinero
+    - saldoFinal : Dinero
+    - capitalPagado : Dinero
+    - interesPagado : Dinero
+    + estaPagada() : boolean
+    + capitalPendiente() : Dinero
+    + interesPendiente() : Dinero
+}
+
+' =========================
+' PAGOS
+' =========================
+
+class Pago {
+    - id : string
+    - fechaPago : Date
+    - monto : Dinero
+    - claveIdempotencia : string
+    - canalOrigen : string
+    + aplicar() : ResultadoAplicacionPago
+}
+
+class ResultadoAplicacionPago {
+    - aplicadoGastos : Dinero
+    - aplicadoMoratorio : Dinero
+    - aplicadoInteresCorriente : Dinero
+    - aplicadoCapital : Dinero
+    - excedente : Dinero
+}
+
+' =========================
+' MOVIMIENTOS Y CIERRES
+' =========================
+
+class Movimiento {
+    - id : string
+    - fecha : Date
+    - tipo : TipoMovimiento
+    - monto : Dinero
+    - referencia : string
+    - descripcion : string
+}
+
+class Cierre {
+    - id : string
+    - fechaCorte : Date
+    - tipo : TipoCierre
+    - saldoCartera : Dinero
+    - montoEnRiesgo : Dinero
+    - porcentajeRiesgo : decimal
+    - montoIncobrablePeriodo : Dinero
+    + generar() : void
+}
+
+' =========================
+' SERVICIOS DEL DOMINIO
+' =========================
+
+class CalculadoraMora <<Domain Service>> {
+    + calcularInteresMoratorio(
+        capitalEnMora : Dinero,
+        tasaMoratoriaAnual : decimal,
+        diasAtraso : int,
+        baseConteo : int
+      ) : Dinero
+    + clasificarTramo(diasAtraso : int) : TramoMora
+}
+
+class CalculadoraCarteraRiesgo <<Domain Service>> {
+    + calcular(
+        creditos : List<Credito>,
+        fechaCorte : Date
+      ) : decimal
+}
+
+class PrelacionPago <<Domain Service>> {
+    + aplicar(
+        pago : Dinero,
+        gastos : Dinero,
+        moratorio : Dinero,
+        interesCorriente : Dinero,
+        capital : Dinero
+      ) : ResultadoAplicacionPago
+}
+
+' =========================
+' RELACIONES
+' =========================
+
+Cliente "1" -- "0..*" SolicitudCredito : realiza >
+
+SolicitudCredito "1" --> "0..1" Credito : origina >
+
+Cliente "1" -- "0..*" Credito : posee >
+
+Credito "1" *-- "1" PlanAmortizacion
+
+PlanAmortizacion "1" *-- "1..*" Cuota
+
+Credito "1" -- "0..*" Pago : recibe >
+
+Pago "1" --> "1" ResultadoAplicacionPago
+
+Credito "1" -- "0..*" Movimiento : genera >
+
+Pago "1" -- "1..*" Movimiento : genera >
+
+Cierre "1" -- "0..*" Movimiento : consolida >
+
+Cierre ..> CalculadoraCarteraRiesgo
+
+Credito ..> CalculadoraMora
+
+Pago ..> PrelacionPago
+
+SolicitudCredito --> Dinero
+Credito --> Dinero
+PlanAmortizacion --> Dinero
+Cuota --> Dinero
+Pago --> Dinero
+Movimiento --> Dinero
+Cierre --> Dinero
+
+@enduml

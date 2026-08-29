@@ -1,0 +1,146 @@
+@startuml
+
+title Diagrama de Actividades - Originación del Crédito
+
+skinparam shadowing false
+
+start
+
+partition Cliente {
+
+    :Solicitar crédito;
+
+}
+
+partition "Asesor de crédito" {
+
+    :Verificar si el cliente\nestá registrado;
+
+    if (¿Cliente registrado?) then (No)
+        :Registrar cliente;
+    else (Sí)
+    endif
+
+    :Registrar solicitud\nde crédito;
+
+    :Recopilar información\npara evaluación;
+
+    :Evaluar solicitud según\npolítica de crédito;
+
+}
+
+partition "Sistema de Gestión\nde Microcrédito" {
+
+    :Validar monto solicitado;
+
+    note right
+        Monto permitido:
+        Q1,000.00 a Q25,000.00
+    end note
+
+    :Validar plazo solicitado;
+
+    note right
+        Plazo permitido:
+        3 a 24 meses
+    end note
+
+    :Validar cumplimiento de\npolítica de crédito;
+
+}
+
+partition "Asesor de crédito" {
+
+    :Preparar evaluación\npara Comité de crédito;
+
+}
+
+partition "Comité de crédito" {
+
+    :Revisar solicitud\ny evaluación;
+
+    if (¿Solicitud aprobada?) then (Sí)
+
+        :Aprobar solicitud;
+
+    else (No)
+
+        :Rechazar solicitud;
+        :Registrar motivo\ndel rechazo;
+
+        partition "Sistema de Gestión\nde Microcrédito" {
+            :Cambiar estado a\nRECHAZADO;
+        }
+
+        stop
+
+    endif
+}
+
+partition "Sistema de Gestión\nde Microcrédito" {
+
+    :Cambiar estado a\nAPROBADO;
+
+}
+
+partition Cliente {
+
+    if (¿Cliente continúa\ncon el crédito?) then (Sí)
+
+    else (No)
+
+        :Desistir del crédito;
+
+        partition "Sistema de Gestión\nde Microcrédito" {
+            :Cambiar estado a\nANULADO;
+        }
+
+        stop
+
+    endif
+}
+
+partition "Empleado responsable\ndel desembolso" {
+
+    :Preparar desembolso;
+
+}
+
+partition "Sistema de Gestión\nde Microcrédito" {
+
+    :Obtener política financiera\nvigente;
+
+    :Generar plan de amortización;
+
+    note right
+        Sistema francés.
+
+        Cada cuota se redondea
+        a centavos.
+
+        La última cuota se ajusta
+        para garantizar:
+        saldo final = Q0.00
+    end note
+
+    :Registrar desembolso;
+
+    :Crear movimientos\ndel desembolso;
+
+    :Cambiar estado a\nDESEMBOLSADO;
+
+    :Activar crédito;
+
+    :Cambiar estado a\nVIGENTE;
+
+}
+
+partition Cliente {
+
+    :Recibir desembolso\ny plan de pagos;
+
+}
+
+stop
+
+@enduml

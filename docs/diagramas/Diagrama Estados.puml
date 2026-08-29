@@ -1,0 +1,135 @@
+@startuml
+
+skinparam shadowing false
+skinparam state {
+    BackgroundColor White
+    BorderColor Black
+    ArrowColor Black
+}
+
+title Ciclo de vida del crédito
+
+[*] --> Solicitado
+
+state Solicitado
+state Aprobado
+state Desembolsado
+state Vigente
+state EnMora
+state Reestructurado
+state Rechazado
+state Anulado
+state Cancelado
+state Incobrable
+
+' =========================
+' ORIGINACIÓN
+' =========================
+
+Solicitado --> Aprobado : Comité aprueba\n[Cumple política de crédito]
+
+Solicitado --> Rechazado : Comité rechaza
+
+Aprobado --> Desembolsado : Se desembolsa\n[Capital entregado]
+
+Aprobado --> Anulado : Cliente desiste / expira\n[Antes del desembolso]
+
+Desembolsado --> Vigente : Activar crédito
+
+' =========================
+' OPERACIÓN NORMAL
+' =========================
+
+Vigente --> EnMora : Vence cuota impagada\n[díasAtraso >= 1]
+
+Vigente --> Cancelado : Paga última cuota\n[saldo = 0.00]
+
+' =========================
+' DETERIORO Y RECUPERACIÓN
+' =========================
+
+EnMora --> Vigente : Paga TODO lo vencido\n[díasAtraso = 0]
+
+EnMora --> EnMora : Paga PARTE de lo vencido\n[díasAtraso > 0]\nPuede bajar de tramo
+
+EnMora --> EnMora : Aumenta atraso\n[díasAtraso 1..120]\nPuede subir de tramo
+
+EnMora --> Reestructurado : Acuerdo de nuevas condiciones\n[Comité autoriza]
+
+EnMora --> Incobrable : Supera 120 días sin arreglo\n[díasAtraso > 120]
+
+' =========================
+' REESTRUCTURACIÓN
+' =========================
+
+Reestructurado --> Vigente : Cumple nuevo plan\n[Según política de cura]
+
+Reestructurado --> EnMora : Se atrasa en nuevo plan\n[díasAtraso >= 1]
+
+Reestructurado --> Cancelado : Paga última cuota nueva\n[saldo = 0.00]
+
+' =========================
+' INCOBRABLE
+' =========================
+
+Incobrable --> Incobrable : Cliente paga posteriormente\n[Registrar recuperación de incobrable]
+
+note right of Incobrable
+Es una baja contable.
+
+Un pago posterior NO hace
+que el crédito regrese
+a la cartera activa.
+
+Se registra como
+recuperación de incobrable.
+end note
+
+' =========================
+' ESTADOS TERMINALES
+' =========================
+
+Rechazado --> [*]
+Anulado --> [*]
+Cancelado --> [*]
+
+' Incobrable es terminal para cartera,
+' aunque puede registrar recuperaciones.
+Incobrable --> [*] : Fin de gestión contable
+
+' =========================
+' NOTAS DEL DOMINIO
+' =========================
+
+note right of EnMora
+EN_MORA es un único estado.
+
+Los tramos NO son estados:
+
+1-30 días   = Mora 1
+31-60 días  = Mora 2
+61-90 días  = Mora 3
+91-120 días = Vencido
+
+El tramo se deriva de
+los días de atraso y puede
+subir o bajar.
+end note
+
+note bottom of Reestructurado
+Aunque posteriormente vuelva
+operativamente a VIGENTE,
+el crédito continúa marcado
+como reestructurado para
+el cálculo de cartera en riesgo.
+end note
+
+note bottom of Vigente
+Un crédito puede pasar
+de EN_MORA a VIGENTE
+cuando paga todo lo vencido.
+La recuperación es parte
+normal del ciclo de vida.
+end note
+
+@enduml
