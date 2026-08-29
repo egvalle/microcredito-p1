@@ -1,0 +1,265 @@
+@startuml
+
+title E3 - Diagrama de Componentes del Sistema de Gestión de Microcrédito
+
+skinparam shadowing false
+skinparam componentStyle rectangle
+skinparam linetype ortho
+
+' ==================================================
+' ADAPTADORES PRIMARIOS
+' ==================================================
+
+package "Adaptadores Primarios" {
+
+    [API REST] as API
+    [Frontend] as UI
+    [Chat / RAG\nProyecto Final] as Chat
+    [Servidor MCP\nProyecto Final] as MCP
+
+}
+
+' ==================================================
+' CAPA DE APLICACIÓN
+' ==================================================
+
+package "Aplicación - Casos de Uso" {
+
+    component "RegistrarCliente" as UCRegistrarCliente
+    component "SolicitarCredito" as UCSolicitar
+    component "EvaluarSolicitud" as UCEvaluar
+    component "AprobarSolicitud" as UCAprobar
+    component "DesembolsarCredito" as UCDesembolsar
+
+    component "RegistrarPago" as UCRegistrarPago
+
+    component "GenerarCierreDiario" as UCCierreDiario
+    component "GenerarCierreMensual" as UCCierreMensual
+    component "ConsultarCarteraEnRiesgo" as UCCarteraRiesgo
+
+}
+
+' ==================================================
+' DOMINIO
+' ==================================================
+
+package "Dominio" {
+
+    package "Origen" {
+
+        component Cliente
+        component SolicitudCredito
+        component Credito
+        component PoliticaCredito
+        component HistorialEstadoCredito
+
+    }
+
+    package "Cálculo Financiero" {
+
+        component Dinero
+        component PlanAmortizacion
+        component Cuota
+        component EstrategiaAmortizacion
+        component CalculadoraMora
+
+    }
+
+    package "Cartera y Cobros" {
+
+        component Pago
+        component PrelacionPago
+        component Movimiento
+        component ClasificadorMora
+
+    }
+
+    package "Cierres" {
+
+        component Cierre
+        component CalculadoraCarteraRiesgo
+
+    }
+
+}
+
+' ==================================================
+' PUERTOS SECUNDARIOS
+' ==================================================
+
+package "Puertos Secundarios" {
+
+    interface RepositorioClientes
+    interface RepositorioSolicitudes
+    interface RepositorioCreditos
+    interface RepositorioPagos
+    interface RepositorioMovimientos
+    interface RepositorioCierres
+
+    interface Reloj
+    interface GeneradorIds
+
+}
+
+' ==================================================
+' ADAPTADORES SECUNDARIOS FUTUROS
+' ==================================================
+
+package "Adaptadores Secundarios" {
+
+    component "Persistencia PostgreSQL\nProyecto Final" as PostgreSQL
+
+    component "Reloj del Sistema" as RelojSistema
+
+    component "Generador UUID" as UUID
+
+}
+
+' ==================================================
+' ENTRADAS A CASOS DE USO
+' ==================================================
+
+API --> UCRegistrarCliente
+API --> UCSolicitar
+API --> UCEvaluar
+API --> UCAprobar
+API --> UCDesembolsar
+API --> UCRegistrarPago
+API --> UCCierreDiario
+API --> UCCierreMensual
+API --> UCCarteraRiesgo
+
+UI --> API
+
+Chat --> UCCarteraRiesgo
+Chat --> UCSolicitar
+
+MCP --> UCRegistrarCliente
+MCP --> UCSolicitar
+MCP --> UCRegistrarPago
+MCP --> UCCarteraRiesgo
+
+' ==================================================
+' ORIGEN
+' ==================================================
+
+UCRegistrarCliente --> Cliente
+
+UCSolicitar --> Cliente
+UCSolicitar --> SolicitudCredito
+
+UCEvaluar --> SolicitudCredito
+UCEvaluar --> PoliticaCredito
+
+UCAprobar --> SolicitudCredito
+UCAprobar --> HistorialEstadoCredito
+
+UCDesembolsar --> SolicitudCredito
+UCDesembolsar --> Credito
+UCDesembolsar --> PoliticaCredito
+UCDesembolsar --> PlanAmortizacion
+UCDesembolsar --> Movimiento
+UCDesembolsar --> HistorialEstadoCredito
+
+' ==================================================
+' CÁLCULO FINANCIERO
+' ==================================================
+
+Credito --> Dinero
+SolicitudCredito --> Dinero
+
+PlanAmortizacion --> Dinero
+PlanAmortizacion --> Cuota
+PlanAmortizacion --> EstrategiaAmortizacion
+
+Cuota --> Dinero
+
+CalculadoraMora --> Dinero
+
+' ==================================================
+' CARTERA Y COBROS
+' ==================================================
+
+UCRegistrarPago --> Credito
+UCRegistrarPago --> Pago
+UCRegistrarPago --> CalculadoraMora
+UCRegistrarPago --> PrelacionPago
+UCRegistrarPago --> Movimiento
+UCRegistrarPago --> HistorialEstadoCredito
+
+PrelacionPago --> Dinero
+
+ClasificadorMora --> Credito
+
+' ==================================================
+' CIERRES
+' ==================================================
+
+UCCierreDiario --> Cierre
+UCCierreMensual --> Cierre
+UCCierreMensual --> CalculadoraCarteraRiesgo
+UCCarteraRiesgo --> CalculadoraCarteraRiesgo
+
+CalculadoraCarteraRiesgo --> Credito
+Cierre --> Movimiento
+
+' ==================================================
+' CASOS DE USO HACIA PUERTOS
+' ==================================================
+
+UCRegistrarCliente --> RepositorioClientes
+
+UCSolicitar --> RepositorioClientes
+UCSolicitar --> RepositorioSolicitudes
+
+UCEvaluar --> RepositorioSolicitudes
+
+UCAprobar --> RepositorioSolicitudes
+
+UCDesembolsar --> RepositorioSolicitudes
+UCDesembolsar --> RepositorioCreditos
+UCDesembolsar --> RepositorioMovimientos
+
+UCRegistrarPago --> RepositorioCreditos
+UCRegistrarPago --> RepositorioPagos
+UCRegistrarPago --> RepositorioMovimientos
+
+UCCierreDiario --> RepositorioCierres
+UCCierreDiario --> RepositorioMovimientos
+
+UCCierreMensual --> RepositorioCierres
+UCCierreMensual --> RepositorioMovimientos
+UCCierreMensual --> RepositorioCreditos
+
+UCCarteraRiesgo --> RepositorioCreditos
+
+' ==================================================
+' SERVICIOS TRANSVERSALES
+' ==================================================
+
+UCDesembolsar --> Reloj
+UCRegistrarPago --> Reloj
+UCCierreDiario --> Reloj
+UCCierreMensual --> Reloj
+
+UCRegistrarCliente --> GeneradorIds
+UCSolicitar --> GeneradorIds
+UCDesembolsar --> GeneradorIds
+UCRegistrarPago --> GeneradorIds
+
+' ==================================================
+' IMPLEMENTACIONES FUTURAS
+' ==================================================
+
+PostgreSQL ..|> RepositorioClientes
+PostgreSQL ..|> RepositorioSolicitudes
+PostgreSQL ..|> RepositorioCreditos
+PostgreSQL ..|> RepositorioPagos
+PostgreSQL ..|> RepositorioMovimientos
+PostgreSQL ..|> RepositorioCierres
+
+RelojSistema ..|> Reloj
+
+UUID ..|> GeneradorIds
+
+@enduml

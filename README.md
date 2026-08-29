@@ -1,6 +1,6 @@
 # Sistema de Gestión de Microcrédito
 
-Proyecto académico desarrollado para el curso **Análisis de Sistemas II (037)** de la **Universidad Mariano Gálvez de Guatemala**.
+Proyecto académico desarrollado para el curso **Análisis de Sistemas II** de la **Universidad Mariano Gálvez de Guatemala**.
 
 El proyecto implementa el núcleo de dominio de un **Sistema de Gestión de Microcrédito para Crédito Vecino, S. A.**, aplicando principios de arquitectura de software, diseño orientado a objetos, patrones de diseño y pruebas automatizadas.
 
