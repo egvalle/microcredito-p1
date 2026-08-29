@@ -1,0 +1,1004 @@
+openapi: 3.0.3
+info:
+  title: API - Sistema de Gestión de Microcrédito (Crédito Vecino, S.A.)
+  version: "1.0.0"
+  description: >
+    Contrato de la API (E5) del Proyecto 1.
+  contact:
+    name: Crédito Vecino, S.A. - Equipo de desarrollo
+
+servers:
+  - url: https://api.creditovecino.example.com/v1
+    description: Entorno de referencia (no desplegado en el Proyecto 1)
+
+tags:
+  - name: Clientes
+  - name: Solicitudes
+  - name: Creditos
+  - name: Pagos
+  - name: Cierres
+  - name: CarteraEnRiesgo
+
+paths:
+
+  /clientes:
+    post:
+      tags: [Clientes]
+      operationId: registrarCliente
+      summary: Registrar cliente
+      description: Caso de uso "Registrar cliente" del módulo Originación.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ClienteInput'
+            example:
+              nombreCompleto: "María López Pérez"
+              identificacion: "2589 45123 0101"
+              telefono: "+502 5555-1234"
+              direccion: "6a. Av. 3-45, Zona 1, Guatemala"
+      responses:
+        '201':
+          description: Cliente registrado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Cliente'
+              example:
+                id: "a1b2c3d4-0001-4000-8000-000000000001"
+                nombreCompleto: "María López Pérez"
+                identificacion: "2589 45123 0101"
+                telefono: "+502 5555-1234"
+                direccion: "6a. Av. 3-45, Zona 1, Guatemala"
+                fechaRegistro: "2026-08-27T10:00:00Z"
+        '400':
+          $ref: '#/components/responses/ErrorBadRequest'
+        '409':
+          description: Ya existe un cliente registrado con esa identificación
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+
+  /clientes/{id}:
+    get:
+      tags: [Clientes]
+      operationId: consultarCliente
+      summary: Consultar cliente
+      parameters:
+        - $ref: '#/components/parameters/ClienteIdPath'
+      responses:
+        '200':
+          description: Cliente encontrado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Cliente'
+        '404':
+          $ref: '#/components/responses/ErrorNotFound'
+
+  /solicitudes:
+    post:
+      tags: [Solicitudes]
+      operationId: solicitarCredito
+      summary: Solicitar crédito
+      description: >
+        Registra una solicitud de crédito. La evaluación según la
+        política de crédito vigente (monto Q1,000-Q25,000, plazo
+        3-24 meses) ocurre dentro del caso de uso; si el monto o el
+        plazo no cumplen, la solicitud igual se puede registrar pero
+        queda marcada para revisión (ver 422 en /aprobacion).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SolicitudCreditoInput'
+            example:
+              clienteId: "a1b2c3d4-0001-4000-8000-000000000001"
+              montoSolicitado: 10000.00
+              plazoMeses: 12
+              motivo: "Capital de trabajo para negocio de abarrotes"
+      responses:
+        '201':
+          description: Solicitud registrada en estado SOLICITADO
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SolicitudCredito'
+        '400':
+          $ref: '#/components/responses/ErrorBadRequest'
+        '422':
+          description: >
+            El monto o el plazo no cumplen la política de crédito
+            vigente (fuera de Q1,000-Q25,000 o de 3-24 meses).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+              example:
+                error:
+                  codigo: SOLICITUD_FUERA_DE_POLITICA
+                  mensaje: "El monto solicitado excede el máximo permitido por la política vigente."
+                  detalles:
+                    - campo: montoSolicitado
+                      valor: 30000
+                      maximoPermitido: 25000
+
+  /solicitudes/{id}:
+    get:
+      tags: [Solicitudes]
+      operationId: consultarSolicitud
+      summary: Consultar solicitud de crédito
+      parameters:
+        - $ref: '#/components/parameters/SolicitudIdPath'
+      responses:
+        '200':
+          description: Solicitud encontrada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SolicitudCredito'
+        '404':
+          $ref: '#/components/responses/ErrorNotFound'
+
+  /solicitudes/{id}/aprobacion:
+    post:
+      tags: [Solicitudes]
+      operationId: aprobarSolicitud
+      summary: Aprobar solicitud
+      description: >
+        Caso de uso "Aprobar solicitud" Transición de estado: SOLICITADO → APROBADO.
+      parameters:
+        - $ref: '#/components/parameters/SolicitudIdPath'
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                comentario:
+                  type: string
+      responses:
+        '200':
+          description: Solicitud aprobada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SolicitudCredito'
+        '404':
+          $ref: '#/components/responses/ErrorNotFound'
+        '409':
+          description: >
+            La solicitud no está en un estado que permita aprobarla
+            transición inválida
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+              example:
+                error:
+                  codigo: TRANSICION_INVALIDA
+                  mensaje: "Solo se pueden aprobar solicitudes en estado SOLICITADO."
+                  detalles:
+                    - estadoActual: RECHAZADO
+
+  /solicitudes/{id}/rechazo:
+    post:
+      tags: [Solicitudes]
+      operationId: rechazarSolicitud
+      summary: Rechazar solicitud
+      description: Transición de estado: SOLICITADO → RECHAZADO.
+      parameters:
+        - $ref: '#/components/parameters/SolicitudIdPath'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [motivo]
+              properties:
+                motivo:
+                  type: string
+                  minLength: 5
+            example:
+              motivo: "No cumple con historial crediticio mínimo requerido"
+      responses:
+        '200':
+          description: Solicitud rechazada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SolicitudCredito'
+        '404':
+          $ref: '#/components/responses/ErrorNotFound'
+        '409':
+          $ref: '#/components/responses/ErrorTransicionInvalida'
+
+  /creditos/{id}/desembolso:
+    post:
+      tags: [Creditos]
+      operationId: desembolsarCredito
+      summary: Desembolsar crédito
+      description: >
+        {id} es el id de la SOLICITUD aprobada. 
+        Transición: APROBADO → DESEMBOLSADO → VIGENTE.      
+      parameters:
+        - $ref: '#/components/parameters/SolicitudIdPath'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [fechaDesembolso]
+              properties:
+                fechaDesembolso:
+                  type: string
+                  format: date
+            example:
+              fechaDesembolso: "2026-08-27"
+      responses:
+        '201':
+          description: Crédito desembolsado, con su plan de amortización generado
+          headers:
+            Location:
+              description: URL del nuevo recurso Credito
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Credito'
+        '404':
+          $ref: '#/components/responses/ErrorNotFound'
+        '409':
+          description: La solicitud no está aprobada, ya fue desembolsada, o fue anulada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+
+  /creditos/{id}:
+    get:
+      tags: [Creditos]
+      operationId: consultarCredito
+      summary: Consultar crédito
+      parameters:
+        - $ref: '#/components/parameters/CreditoIdPath'
+      responses:
+        '200':
+          description: Crédito encontrado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Credito'
+        '404':
+          $ref: '#/components/responses/ErrorNotFound'
+
+  /creditos/{id}/plan-amortizacion:
+    get:
+      tags: [Creditos]
+      operationId: consultarPlanAmortizacion
+      summary: Generar / consultar plan de amortización
+      description: >
+        Retorna la tabla de amortización completa (todas las cuotas)
+        vigente para el crédito, calculada con el módulo de Cálculo
+        financiero (funciones puras, sin infraestructura).
+      parameters:
+        - $ref: '#/components/parameters/CreditoIdPath'
+      responses:
+        '200':
+          description: Plan de amortización
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PlanAmortizacion'
+        '404':
+          $ref: '#/components/responses/ErrorNotFound'
+
+  /creditos/{id}/saldo:
+    get:
+      tags: [Creditos]
+      operationId: consultarSaldo
+      summary: Consultar saldo
+      parameters:
+        - $ref: '#/components/parameters/CreditoIdPath'
+      responses:
+        '200':
+          description: Saldo actual del crédito
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [creditoId, saldoCapital, cuotasVencidas, diasAtrasoMaximo, tramoMora]
+                properties:
+                  creditoId:
+                    type: string
+                    format: uuid
+                  saldoCapital:
+                    $ref: '#/components/schemas/Dinero'
+                  cuotasVencidas:
+                    type: integer
+                  diasAtrasoMaximo:
+                    type: integer
+                  tramoMora:
+                    $ref: '#/components/schemas/TramoMora'
+        '404':
+          $ref: '#/components/responses/ErrorNotFound'
+
+  /creditos/{id}/pagos:
+    post:
+      tags: [Pagos]
+      operationId: registrarPago
+      summary: Registrar pago
+      description: >
+        Caso de uso Registrar pago: gastos →
+        interés moratorio → interés corriente → capital (sección 6.6).
+        Requiere idempotencia (ver Idempotency-Key abajo).
+      parameters:
+        - $ref: '#/components/parameters/CreditoIdPath'
+        - name: Idempotency-Key
+          in: header
+          required: true
+          description: >
+            Clave de idempotencia. Ver `components.headers.IdempotencyKey`
+            para el comportamiento completo.
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PagoInput'
+            example:
+              monto: 1011.88
+              fechaPago: "2026-08-27"
+              canalOrigen: "empleado_cobros"
+      responses:
+        '201':
+          description: Pago nuevo, registrado y aplicado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResultadoPago'
+        '200':
+          description: >
+            Reintento con la misma Idempotency-Key y el mismo cuerpo:
+            se retorna el resultado original, SIN volver a aplicar el
+            pago ni afectar el saldo por segunda vez.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResultadoPago'
+        '400':
+          $ref: '#/components/responses/ErrorBadRequest'
+        '404':
+          $ref: '#/components/responses/ErrorNotFound'
+        '409':
+          description: >
+            (a) El crédito no puede recibir pagos en su estado actual
+            (p. ej. 'solicitado' o 'rechazado'), o (b) la misma
+            Idempotency-Key fue reutilizada con un cuerpo de solicitud
+            distinto al del primer intento.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+              examples:
+                estadoInvalido:
+                  value:
+                    error:
+                      codigo: CREDITO_ESTADO_INVALIDO
+                      mensaje: "El crédito no puede recibir pagos en su estado actual."
+                      detalles:
+                        - estadoActual: SOLICITADO
+                idempotencyKeyReutilizada:
+                  value:
+                    error:
+                      codigo: IDEMPOTENCY_KEY_REUTILIZADA
+                      mensaje: "La clave de idempotencia ya fue usada con una solicitud de pago distinta."
+                      detalles:
+                        - idempotencyKey: "9d3f2b10-....."
+
+  /creditos/{id}/reestructuracion:
+    post:
+      tags: [Creditos]
+      operationId: reestructurarCredito
+      summary: Reestructurar crédito
+      description: >
+        Requiere autorización del Comité de crédito. Genera un nuevo
+        plan de pagos. El crédito queda marcado como reestructurado de
+        forma permanente para efectos de cartera en riesgo (sección
+        6.8), aunque quede al día bajo las nuevas condiciones.
+      parameters:
+        - $ref: '#/components/parameters/CreditoIdPath'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [nuevoPlazoMeses]
+              properties:
+                nuevoPlazoMeses:
+                  type: integer
+                  minimum: 3
+                  maximum: 24
+                comentario:
+                  type: string
+      responses:
+        '200':
+          description: Crédito reestructurado, con nuevo plan de amortización
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Credito'
+        '404':
+          $ref: '#/components/responses/ErrorNotFound'
+        '409':
+          $ref: '#/components/responses/ErrorTransicionInvalida'
+
+  /creditos/{id}/incobrable:
+    post:
+      tags: [Creditos]
+      operationId: declararIncobrable
+      summary: Declarar crédito incobrable
+      description: >
+        Baja contable (no un perdón de deuda). El crédito sale de la
+        cartera activa; su gestión se terceriza a una casa de cobro
+        externa. Solo aplica a créditos con más de 120 días de atraso.
+      parameters:
+        - $ref: '#/components/parameters/CreditoIdPath'
+      responses:
+        '200':
+          description: Crédito declarado incobrable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Credito'
+        '404':
+          $ref: '#/components/responses/ErrorNotFound'
+        '422':
+          description: El crédito no supera los 120 días de atraso requeridos
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+
+
+  /cierres/diarios:
+    post:
+      tags: [Cierres]
+      operationId: generarCierreDiario
+      summary: Generar cierre diario
+      description: >
+        Idempotente por fecha de corte: reejecutar el cierre del mismo
+        día produce el mismo resultado y no duplica movimientos
+        (sección 6.9). Si ya existe un cierre para esa fecha, se
+        retorna el existente con 200 en vez de crear uno nuevo.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [fechaCorte]
+              properties:
+                fechaCorte:
+                  type: string
+                  format: date
+      responses:
+        '201':
+          description: Cierre diario generado por primera vez
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Cierre'
+        '200':
+          description: El cierre para esa fecha ya existía; se retorna sin duplicar movimientos
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Cierre'
+        '400':
+          $ref: '#/components/responses/ErrorBadRequest'
+
+  /cierres/mensuales:
+    post:
+      tags: [Cierres]
+      operationId: generarCierreMensual
+      summary: Generar cierre mensual
+      description: >
+        Incluye, además del cierre diario, la cartera en riesgo por
+        tramo y el monto dado por incobrable en el período (sección
+        6.8-6.9). Idempotente igual que el cierre diario.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [fechaCorte]
+              properties:
+                fechaCorte:
+                  type: string
+                  format: date
+      responses:
+        '201':
+          description: Cierre mensual generado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Cierre'
+        '200':
+          description: El cierre mensual para ese período ya existía
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Cierre'
+        '400':
+          $ref: '#/components/responses/ErrorBadRequest'
+
+
+  /cartera/riesgo:
+    get:
+      tags: [CarteraEnRiesgo]
+      operationId: consultarCarteraEnRiesgo
+      summary: Consultar cartera en riesgo
+      description: >
+        Cuenta como en riesgo todo crédito con más de 30 días de
+        atraso. Los incobrables quedan fuera de la cartera activa.
+      parameters:
+        - name: fechaCorte
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date
+      responses:
+        '200':
+          description: Cartera en riesgo a la fecha de corte
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CarteraEnRiesgo'
+        '400':
+          $ref: '#/components/responses/ErrorBadRequest'
+
+
+components:
+
+  parameters:
+    ClienteIdPath:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    SolicitudIdPath:
+      name: id
+      in: path
+      required: true
+      description: Id de la solicitud de crédito
+      schema:
+        type: string
+        format: uuid
+    CreditoIdPath:
+      name: id
+      in: path
+      required: true
+      description: Id del crédito (existe solo tras el desembolso)
+      schema:
+        type: string
+        format: uuid
+
+  headers:
+    IdempotencyKey:
+      description: >
+        Clave de idempotencia para POST /creditos/{id}/pagos.
+      schema:
+        type: string
+        format: uuid
+
+  responses:
+    ErrorBadRequest:
+      description: >
+        400 — El cuerpo de la solicitud no cumple el esquema (campos
+        faltantes, tipos incorrectos). Error de forma, no de negocio.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+    ErrorNotFound:
+      description: 404 — El recurso solicitado no existe.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+    ErrorTransicionInvalida:
+      description: >
+        409 — La operación pedida no es una transición de estado
+        válida para el recurso en su estado actual (patrón State).
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+
+  schemas:
+
+    # Error uniforme
+    ErrorEnvelope:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [codigo, mensaje]
+          properties:
+            codigo:
+              type: string
+              description: >
+                Código estable en MAYUSCULAS_CON_GUIONES_BAJOS, pensado
+                para que el cliente (UI, chat o MCP) pueda reaccionar
+                programáticamente sin parsear el mensaje.
+              example: CREDITO_ESTADO_INVALIDO
+            mensaje:
+              type: string
+              description: Mensaje legible para humanos.
+            detalles:
+              type: array
+              description: Información adicional opcional (campo, valor recibido, límite, etc.)
+              items:
+                type: object
+                additionalProperties: true
+
+ 
+    Dinero:
+      type: object
+      description: >
+        Importe monetario representado como entero en centavos (Value
+        Object del dominio). Nunca se serializa como número de punto
+        flotante en unidades; el campo `montoCentavos` es siempre
+        entero, y `moneda` es obligatorio y explícito para eliminar
+        cualquier ambigüedad.
+      required: [montoCentavos, moneda]
+      properties:
+        montoCentavos:
+          type: integer
+          format: int64
+          example: 1004662
+        moneda:
+          type: string
+          enum: [GTQ]
+          description: Fijo en GTQ para este proyecto; se deja como enum para permitir extensión futura.
+
+
+    ClienteInput:
+      type: object
+      required: [nombreCompleto, identificacion, telefono, direccion]
+      properties:
+        nombreCompleto:
+          type: string
+          minLength: 3
+        identificacion:
+          type: string
+          description: Número de DPI u otro documento de identificación.
+        telefono:
+          type: string
+        direccion:
+          type: string
+
+    Cliente:
+      allOf:
+        - $ref: '#/components/schemas/ClienteInput'
+        - type: object
+          required: [id, fechaRegistro]
+          properties:
+            id:
+              type: string
+              format: uuid
+            fechaRegistro:
+              type: string
+              format: date-time
+
+
+    EstadoCredito:
+      type: string
+      description: >
+        Ciclo de vida completo del crédito (incluye la etapa de
+        originación). Los tramos de mora NO están en esta lista: se
+        derivan de los días de atraso, ver TramoMora.
+      enum:
+        - SOLICITADO
+        - APROBADO
+        - RECHAZADO
+        - ANULADO
+        - DESEMBOLSADO
+        - VIGENTE
+        - EN_MORA
+        - REESTRUCTURADO
+        - CANCELADO
+        - INCOBRABLE
+
+    TramoMora:
+      type: string
+      description: Clasificación derivada de los días de atraso. NO es un estado.
+      enum: [SIN_MORA, MORA_1, MORA_2, MORA_3, VENCIDO]
+
+
+    SolicitudCreditoInput:
+      type: object
+      required: [clienteId, montoSolicitado, plazoMeses, motivo]
+      properties:
+        clienteId:
+          type: string
+          format: uuid
+        montoSolicitado:
+          type: number
+          format: double
+          minimum: 1000
+          maximum: 25000
+          description: En quetzales. Política vigente al momento de escribir este contrato Q1,000-Q25,000.
+        plazoMeses:
+          type: integer
+          minimum: 3
+          maximum: 24
+        motivo:
+          type: string
+
+    SolicitudCredito:
+      allOf:
+        - $ref: '#/components/schemas/SolicitudCreditoInput'
+        - type: object
+          required: [id, fechaSolicitud, estado]
+          properties:
+            id:
+              type: string
+              format: uuid
+            fechaSolicitud:
+              type: string
+              format: date-time
+            estado:
+              $ref: '#/components/schemas/EstadoCredito'
+            creditoId:
+              type: string
+              format: uuid
+              description: Presente solo una vez desembolsada la solicitud.
+
+
+    Credito:
+      type: object
+      required:
+        - id
+        - clienteId
+        - capitalOriginal
+        - saldoCapital
+        - tasaNominalAnual
+        - tasaMoratoriaAnual
+        - plazoMeses
+        - estado
+        - reestructurado
+      properties:
+        id:
+          type: string
+          format: uuid
+        clienteId:
+          type: string
+          format: uuid
+        solicitudId:
+          type: string
+          format: uuid
+        fechaDesembolso:
+          type: string
+          format: date
+        capitalOriginal:
+          $ref: '#/components/schemas/Dinero'
+        saldoCapital:
+          $ref: '#/components/schemas/Dinero'
+        tasaNominalAnual:
+          type: number
+          example: 0.36
+          description: TNA como decimal (36% = 0.36). Corresponde a la PoliticaCredito vigente en la fecha de desembolso.
+        tasaMoratoriaAnual:
+          type: number
+          example: 0.24
+        plazoMeses:
+          type: integer
+        estado:
+          $ref: '#/components/schemas/EstadoCredito'
+        tramoMora:
+          $ref: '#/components/schemas/TramoMora'
+        reestructurado:
+          type: boolean
+          description: Se mantiene en true de forma permanente una vez reestructurado, para efectos de cartera en riesgo.
+        historialEstados:
+          type: array
+          description: Trazabilidad de cambios de estado (HistorialEstadoCredito). Nunca se borra.
+          items:
+            $ref: '#/components/schemas/HistorialEstadoCredito'
+
+    HistorialEstadoCredito:
+      type: object
+      required: [estadoAnterior, estadoNuevo, fecha, usuarioOProceso]
+      properties:
+        estadoAnterior:
+          $ref: '#/components/schemas/EstadoCredito'
+        estadoNuevo:
+          $ref: '#/components/schemas/EstadoCredito'
+        fecha:
+          type: string
+          format: date-time
+        usuarioOProceso:
+          type: string
+        motivo:
+          type: string
+
+
+    Cuota:
+      type: object
+      required: [numero, fechaVencimiento, saldoInicial, montoCuota, interesCorriente, amortizacionCapital, saldoFinal]
+      properties:
+        numero:
+          type: integer
+        fechaVencimiento:
+          type: string
+          format: date
+        saldoInicial:
+          $ref: '#/components/schemas/Dinero'
+        montoCuota:
+          $ref: '#/components/schemas/Dinero'
+        interesCorriente:
+          $ref: '#/components/schemas/Dinero'
+        amortizacionCapital:
+          $ref: '#/components/schemas/Dinero'
+        saldoFinal:
+          $ref: '#/components/schemas/Dinero'
+
+    PlanAmortizacion:
+      type: object
+      required: [creditoId, cuotas]
+      properties:
+        creditoId:
+          type: string
+          format: uuid
+        cuotas:
+          type: array
+          items:
+            $ref: '#/components/schemas/Cuota'
+
+    PagoInput:
+      type: object
+      required: [monto, fechaPago]
+      properties:
+        monto:
+          type: number
+          format: double
+          minimum: 0.01
+        fechaPago:
+          type: string
+          format: date
+        canalOrigen:
+          type: string
+          description: >
+            Identifica el canal que originó el pago (empleado de
+            cobros, transferencia, cajero, pasarela...). El caso de
+            uso RegistrarPago es idéntico sin importar este valor.
+          example: empleado_cobros
+
+    ResultadoPago:
+      type: object
+      required:
+        - pagoId
+        - aplicadoGastos
+        - aplicadoInteresMoratorio
+        - aplicadoInteresCorriente
+        - aplicadoCapital
+        - excedente
+        - creditoRegularizado
+      properties:
+        pagoId:
+          type: string
+          format: uuid
+        aplicadoGastos:
+          $ref: '#/components/schemas/Dinero'
+        aplicadoInteresMoratorio:
+          $ref: '#/components/schemas/Dinero'
+        aplicadoInteresCorriente:
+          $ref: '#/components/schemas/Dinero'
+        aplicadoCapital:
+          $ref: '#/components/schemas/Dinero'
+        excedente:
+          $ref: '#/components/schemas/Dinero'
+          description: >
+            Nunca se pierde: si es mayor a cero, se aplicó según la
+            política de adelanto vigente (amortización a capital o
+            cuotas futuras), registrado en un Movimiento separado.
+        creditoRegularizado:
+          type: boolean
+          description: true si el crédito volvió de EN_MORA a VIGENTE con este pago.
+
+    Movimiento:
+      type: object
+      description: Entrada de mayor (append-only). Los saldos nunca se sobrescriben, se reconstruyen acumulando movimientos.
+      required: [id, fecha, tipo, monto, referencia]
+      properties:
+        id:
+          type: string
+          format: uuid
+        fecha:
+          type: string
+          format: date-time
+        tipo:
+          type: string
+          enum:
+            - DESEMBOLSO
+            - PAGO
+            - INTERES_CORRIENTE
+            - INTERES_MORATORIO
+            - GASTO
+            - COMISION
+            - AMORTIZACION_CAPITAL
+            - RECUPERACION_INCOBRABLE
+        monto:
+          $ref: '#/components/schemas/Dinero'
+        referencia:
+          type: string
+        descripcion:
+          type: string
+
+    Cierre:
+      type: object
+      required: [id, fechaCorte, tipo, saldoCartera, montoEnRiesgo, porcentajeRiesgo, montoIncobrablePeriodo]
+      properties:
+        id:
+          type: string
+          format: uuid
+        fechaCorte:
+          type: string
+          format: date
+        tipo:
+          type: string
+          enum: [DIARIO, MENSUAL]
+        saldoCartera:
+          $ref: '#/components/schemas/Dinero'
+        montoEnRiesgo:
+          $ref: '#/components/schemas/Dinero'
+        porcentajeRiesgo:
+          type: number
+          minimum: 0
+          maximum: 1
+        montoIncobrablePeriodo:
+          $ref: '#/components/schemas/Dinero'
+
+
+    CarteraEnRiesgo:
+      type: object
+      required: [fechaCorte, carteraActiva, carteraEnRiesgo, porcentajeEnRiesgo, montoIncobrablePeriodo]
+      properties:
+        fechaCorte:
+          type: string
+          format: date
+        carteraActiva:
+          $ref: '#/components/schemas/Dinero'
+        carteraEnRiesgo:
+          $ref: '#/components/schemas/Dinero'
+        porcentajeEnRiesgo:
+          type: number
+          minimum: 0
+          maximum: 1
+        montoIncobrablePeriodo:
+          $ref: '#/components/schemas/Dinero'
+          description: >
+            Se reporta siempre junto al porcentaje, para que declarar
+            créditos incobrables no "maquille" el indicador.
+        creditosEnRiesgo:
+          type: array
+          items:
+            type: string
+            format: uuid
