@@ -7,6 +7,12 @@ import {
     EstadoSolicitado,
     EstadoVigente
 } from "../src/dominio/credito.js";
+import { Dinero } from "../src/dominio/dinero.js";
+import { CatalogoPoliticas } from "../src/dominio/politica-mora/catalogo-politicas.js";
+import { PoliticaMoraPlana } from "../src/dominio/politica-mora/politica-plana.js";
+import { PoliticaMoraEscalonada } from "../src/dominio/politica-mora/politica-escalonada.js";
+
+const FECHA_OTORGAMIENTO_GENERICA = new Date("2025-01-01T00:00:00Z");
 
 describe("Credito - patrón State", () => {
 
@@ -14,7 +20,8 @@ describe("Credito - patrón State", () => {
 
         const credito =
             new Credito(
-                new EstadoVigente()
+                new EstadoVigente(),
+            FECHA_OTORGAMIENTO_GENERICA
             );
 
         credito.registrarAtraso(45);
@@ -37,6 +44,7 @@ describe("Credito - patrón State", () => {
         const credito =
             new Credito(
                 new EstadoEnMora(),
+                FECHA_OTORGAMIENTO_GENERICA,
                 45
             );
 
@@ -60,6 +68,7 @@ describe("Credito - patrón State", () => {
         const credito =
             new Credito(
                 new EstadoEnMora(),
+                FECHA_OTORGAMIENTO_GENERICA,
                 10
             );
 
@@ -82,7 +91,8 @@ describe("Credito - patrón State", () => {
 
         const credito =
             new Credito(
-                new EstadoVigente()
+                new EstadoVigente(),
+            FECHA_OTORGAMIENTO_GENERICA
             );
 
         credito.registrarAtraso(45);
@@ -120,7 +130,8 @@ describe("Credito - patrón State", () => {
 
         const credito =
             new Credito(
-                new EstadoSolicitado()
+                new EstadoSolicitado(),
+            FECHA_OTORGAMIENTO_GENERICA
             );
 
         expect(() => {
@@ -138,7 +149,8 @@ describe("Credito - patrón State", () => {
 
         const credito =
             new Credito(
-                new EstadoSolicitado()
+                new EstadoSolicitado(),
+            FECHA_OTORGAMIENTO_GENERICA
             );
 
         expect(() => {
@@ -152,7 +164,8 @@ describe("Credito - patrón State", () => {
 
         const credito =
             new Credito(
-                new EstadoCancelado()
+                new EstadoCancelado(),
+            FECHA_OTORGAMIENTO_GENERICA
             );
 
         expect(() => {
@@ -162,16 +175,194 @@ describe("Credito - patrón State", () => {
         );
     });
 
+    it("CP-04.1: debe pasar a CANCELADO cuando el pago liquida todo el saldo en mora", () => {
+
+        const credito =
+            new Credito(
+                new EstadoEnMora(),
+                FECHA_OTORGAMIENTO_GENERICA,
+                15
+            );
+
+        credito.registrarPago(0, true);
+
+        expect(
+            credito.obtenerEstado()
+        ).toBe("CANCELADO");
+
+        expect(
+            credito.obtenerDiasAtraso()
+        ).toBe(0);
+    });
+
+    it("CP-04.1: debe seguir yendo a VIGENTE cuando el pago pone al día pero no liquida el saldo", () => {
+
+        const credito =
+            new Credito(
+                new EstadoEnMora(),
+                FECHA_OTORGAMIENTO_GENERICA,
+                15
+            );
+
+        credito.registrarPago(0, false);
+
+        expect(
+            credito.obtenerEstado()
+        ).toBe("VIGENTE");
+    });
+
+    it("CP-04.1: un crédito cancelado no puede volver a recibir pagos", () => {
+
+        const credito =
+            new Credito(
+                new EstadoEnMora(),
+                FECHA_OTORGAMIENTO_GENERICA,
+                15
+            );
+
+        credito.registrarPago(0, true);
+
+        expect(() => {
+            credito.registrarPago(0, true);
+        }).toThrow(
+            "Un crédito cancelado no puede recibir pagos"
+        );
+    });
+
+    it("CP-04.1: rechaza marcar saldoLiquidado con días de atraso pendientes", () => {
+
+        const credito =
+            new Credito(
+                new EstadoEnMora(),
+                FECHA_OTORGAMIENTO_GENERICA,
+                15
+            );
+
+        expect(() => {
+            credito.registrarPago(5, true);
+        }).toThrow(
+            "Un saldo liquidado no puede dejar días de atraso pendientes"
+        );
+    });
+
     it("debe rechazar días de atraso negativos", () => {
 
         expect(() => {
             new Credito(
                 new EstadoVigente(),
+                FECHA_OTORGAMIENTO_GENERICA,
                 -1
             );
         }).toThrow(
             "Los días de atraso deben ser un entero mayor o igual a cero"
         );
+    });
+
+});
+
+describe("Credito - conexión con CatalogoPoliticas (7.6, coexistencia de políticas)", () => {
+
+    const CAPITAL_EN_MORA = Dinero.desdeQuetzales("725.76");
+
+    const catalogo = new CatalogoPoliticas(
+        new PoliticaMoraPlana(),
+        new PoliticaMoraEscalonada()
+    );
+
+    it("7.6 / CP-03: crédito otorgado antes del 1/oct/2026 usa la política plana -> Q21.77", () => {
+
+        const credito = new Credito(
+            new EstadoEnMora(),
+            new Date("2025-06-15T00:00:00Z"),
+            45
+        );
+
+        const interes =
+            credito.calcularInteresMoratorio(
+                catalogo,
+                CAPITAL_EN_MORA
+            );
+
+        expect(interes.aDecimal()).toBe("21.77");
+    });
+
+    it("7.6: crédito otorgado el 1/oct/2026 o después usa la política escalonada -> Q18.14", () => {
+
+        const credito = new Credito(
+            new EstadoEnMora(),
+            new Date("2026-10-01T00:00:00Z"),
+            45
+        );
+
+        const interes =
+            credito.calcularInteresMoratorio(
+                catalogo,
+                CAPITAL_EN_MORA
+            );
+
+        expect(interes.aDecimal()).toBe("18.14");
+    });
+
+    it("dos créditos con los mismos días de atraso pueden pagar mora distinta según su fecha de otorgamiento", () => {
+
+        const creditoAntiguo = new Credito(
+            new EstadoEnMora(),
+            new Date("2026-09-30T00:00:00Z"),
+            45
+        );
+
+        const creditoNuevo = new Credito(
+            new EstadoEnMora(),
+            new Date("2026-10-02T00:00:00Z"),
+            45
+        );
+
+        const interesAntiguo =
+            creditoAntiguo.calcularInteresMoratorio(
+                catalogo,
+                CAPITAL_EN_MORA
+            );
+
+        const interesNuevo =
+            creditoNuevo.calcularInteresMoratorio(
+                catalogo,
+                CAPITAL_EN_MORA
+            );
+
+        expect(interesAntiguo.igualA(interesNuevo)).toBe(false);
+        expect(interesAntiguo.aDecimal()).toBe("21.77");
+        expect(interesNuevo.aDecimal()).toBe("18.14");
+    });
+
+    it("rechaza calcular mora de un crédito que no tiene días de atraso", () => {
+
+        const credito = new Credito(
+            new EstadoVigente(),
+            new Date("2026-11-01T00:00:00Z")
+        );
+
+        expect(() => {
+            credito.calcularInteresMoratorio(
+                catalogo,
+                CAPITAL_EN_MORA
+            );
+        }).toThrow(
+            "Un crédito sin días de atraso no genera interés moratorio"
+        );
+    });
+
+    it("expone su fecha de otorgamiento sin haberla leído del sistema", () => {
+
+        const fecha = new Date("2026-01-20T00:00:00Z");
+
+        const credito = new Credito(
+            new EstadoVigente(),
+            fecha
+        );
+
+        expect(
+            credito.obtenerFechaOtorgamiento().getTime()
+        ).toBe(fecha.getTime());
     });
 
 });
