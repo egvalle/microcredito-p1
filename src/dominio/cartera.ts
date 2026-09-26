@@ -133,6 +133,24 @@ export interface ResultadoCarteraRiesgo {
     porcentajeRiesgo: Decimal;
 }
 
+export type EtiquetaTramoCartera =
+    | Exclude<TramoMora, "SIN_MORA">
+    | "REESTRUCTURADO";
+
+export interface DesgloseTramoCartera {
+    tramo: EtiquetaTramoCartera;
+    creditos: readonly string[];
+    saldoCapital: Dinero;
+    porcentajeDeCarteraActiva: Decimal;
+}
+
+export interface ResultadoCarteraPorTramo {
+    carteraActiva: Dinero;
+    desglose: readonly DesgloseTramoCartera[];
+    totalEnRiesgo: Dinero;
+    porcentajeTotalEnRiesgo: Decimal;
+}
+
 export class CalculadoraCarteraRiesgo {
 
     public calcular(
@@ -218,6 +236,149 @@ export class CalculadoraCarteraRiesgo {
             credito.diasAtraso > 30 ||
             credito.reestructurado
         );
+    }
+
+    public calcularPorTramo(
+        creditos: readonly CreditoCartera[]
+    ): ResultadoCarteraPorTramo {
+
+        if (creditos.length === 0) {
+            throw new Error(
+                "La cartera debe contener al menos un crédito"
+            );
+        }
+
+        this.validarCreditos(creditos);
+
+        const moneda =
+            creditos[0]?.saldoCapital.obtenerMoneda();
+
+        if (!moneda) {
+            throw new Error(
+                "No fue posible determinar la moneda de la cartera"
+            );
+        }
+
+        const clasificador =
+            new ClasificadorMora();
+
+        const etiquetas: EtiquetaTramoCartera[] = [
+            "MORA_1",
+            "MORA_2",
+            "MORA_3",
+            "VENCIDO",
+            "REESTRUCTURADO"
+        ];
+
+        const acumulado = new Map<
+            EtiquetaTramoCartera,
+            { creditos: string[]; saldo: Dinero }
+        >(
+            etiquetas.map(
+                etiqueta => [
+                    etiqueta,
+                    { creditos: [], saldo: this.cero(moneda) }
+                ]
+            )
+        );
+
+        let carteraActiva =
+            this.cero(moneda);
+
+        for (const credito of creditos) {
+
+            if (credito.incobrable) {
+                continue;
+            }
+
+            carteraActiva =
+                carteraActiva.sumar(
+                    credito.saldoCapital
+                );
+
+            if (!this.estaEnRiesgo(credito)) {
+                continue;
+            }
+
+            const etiqueta: EtiquetaTramoCartera =
+                credito.reestructurado
+                    ? "REESTRUCTURADO"
+                    : (clasificador.clasificar(
+                        credito.diasAtraso
+                    ) as EtiquetaTramoCartera);
+
+            const entrada =
+                acumulado.get(etiqueta);
+
+            if (entrada) {
+                entrada.creditos.push(credito.id);
+                entrada.saldo =
+                    entrada.saldo.sumar(
+                        credito.saldoCapital
+                    );
+            }
+        }
+
+        const desglose: DesgloseTramoCartera[] =
+            etiquetas.map(etiqueta => {
+
+                const entrada =
+                    acumulado.get(etiqueta) ?? {
+                        creditos: [],
+                        saldo: this.cero(moneda)
+                    };
+
+                return {
+                    tramo: etiqueta,
+                    creditos: entrada.creditos,
+                    saldoCapital: entrada.saldo,
+                    porcentajeDeCarteraActiva:
+                        this.porcentaje(
+                            entrada.saldo,
+                            carteraActiva
+                        )
+                };
+            });
+
+        const totalEnRiesgo =
+            desglose.reduce(
+                (total, fila) =>
+                    total.sumar(fila.saldoCapital),
+                this.cero(moneda)
+            );
+
+        return {
+            carteraActiva,
+            desglose,
+            totalEnRiesgo,
+            porcentajeTotalEnRiesgo:
+                this.porcentaje(
+                    totalEnRiesgo,
+                    carteraActiva
+                )
+        };
+    }
+
+    private porcentaje(
+        parte: Dinero,
+        total: Dinero
+    ): Decimal {
+
+        if (total.esCero()) {
+            return new Decimal(0);
+        }
+
+        return new Decimal(
+            parte.obtenerCentavos().toString()
+        )
+            .div(
+                total.obtenerCentavos().toString()
+            )
+            .mul(100)
+            .toDecimalPlaces(
+                2,
+                Decimal.ROUND_HALF_UP
+            );
     }
 
     private validarCreditos(

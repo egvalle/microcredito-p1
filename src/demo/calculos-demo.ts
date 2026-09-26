@@ -14,8 +14,12 @@ import type {
 } from "../dominio/cartera.js";
 import {
     Credito,
+    EstadoEnMora,
     EstadoVigente
 } from "../dominio/credito.js";
+import { CatalogoPoliticas } from "../dominio/politica-mora/catalogo-politicas.js";
+import { PoliticaMoraPlana } from "../dominio/politica-mora/politica-plana.js";
+import { PoliticaMoraEscalonada } from "../dominio/politica-mora/politica-escalonada.js";
 
 const lineas: string[] = [];
 
@@ -455,9 +459,13 @@ escribir(
 
 escribir("");
 
+const fechaOtorgamientoDemo =
+    new Date("2025-06-15T00:00:00Z");
+
 const creditoDemo =
     new Credito(
-        new EstadoVigente()
+        new EstadoVigente(),
+        fechaOtorgamientoDemo
     );
 
 escribir(
@@ -494,6 +502,52 @@ escribir(
     } / ${
         creditoDemo.obtenerTramoMora()
     }`
+);
+
+
+titulo("7. MORA DE UN CRÉDITO REAL SEGÚN SU FECHA DE OTORGAMIENTO");
+
+const catalogoPoliticas =
+    new CatalogoPoliticas(
+        new PoliticaMoraPlana(),
+        new PoliticaMoraEscalonada()
+    );
+
+const capitalEnMoraDemo =
+    Dinero.desdeQuetzales("725.76");
+
+const creditoAntiguo =
+    new Credito(
+        new EstadoEnMora(),
+        new Date("2025-06-15T00:00:00Z"), // otorgado antes del 1/oct/2026
+        45
+    );
+
+const creditoNuevo =
+    new Credito(
+        new EstadoEnMora(),
+        new Date("2026-11-03T00:00:00Z"), // otorgado después del 1/oct/2026
+        45
+    );
+
+escribir(
+    `Crédito otorgado 2025-06-15, 45 días de atraso -> ` +
+    `${moneda(
+        creditoAntiguo.calcularInteresMoratorio(
+            catalogoPoliticas,
+            capitalEnMoraDemo
+        )
+    )} (política plana, CP-03)`
+);
+
+escribir(
+    `Crédito otorgado 2026-11-03, 45 días de atraso -> ` +
+    `${moneda(
+        creditoNuevo.calcularInteresMoratorio(
+            catalogoPoliticas,
+            capitalEnMoraDemo
+        )
+    )} (política escalonada, 7.6)`
 );
 
 /* ============================================================

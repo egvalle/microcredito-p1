@@ -1,4 +1,6 @@
 import { ClasificadorMora, TramoMora } from "./cartera.js";
+import { Dinero } from "./dinero.js";
+import { CatalogoPoliticas } from "./politica-mora/catalogo-politicas.js";
 
 export type NombreEstadoCredito =
     | "SOLICITADO"
@@ -12,7 +14,8 @@ export interface EstadoCredito {
 
     registrarPago(
         credito: Credito,
-        diasAtrasoRestantes: number
+        diasAtrasoRestantes: number,
+        saldoLiquidado?: boolean
     ): void;
 
     registrarAtraso(
@@ -27,11 +30,21 @@ export class Credito {
 
     private diasAtraso: number;
 
+    private readonly fechaOtorgamiento: Date;
+
     private readonly clasificadorMora:
         ClasificadorMora;
 
+    /**
+     * @param fechaOtorgamiento Fecha en que el crédito fue otorgado.
+     * Se recibe siempre como parámetro — el núcleo nunca lee la fecha
+     * del sistema (puerto Reloj, P1). Es la fecha que determina, vía
+     * CatalogoPoliticas, qué política moratoria le corresponde a este
+     * crédito durante toda su vida (P1, 6.3.1).
+     */
     public constructor(
         estadoInicial: EstadoCredito,
+        fechaOtorgamiento: Date,
         diasAtrasoInicial: number = 0
     ) {
 
@@ -46,9 +59,16 @@ export class Credito {
 
         this.estado = estadoInicial;
         this.diasAtraso = diasAtrasoInicial;
+        this.fechaOtorgamiento = fechaOtorgamiento;
 
         this.clasificadorMora =
             new ClasificadorMora();
+    }
+
+    public obtenerFechaOtorgamiento():
+        Date {
+
+        return this.fechaOtorgamiento;
     }
 
     public obtenerEstado():
@@ -72,17 +92,60 @@ export class Credito {
             );
     }
 
+    /**
+     * Calcula el interés moratorio de este crédito real: resuelve la
+     * política que le corresponde según su propia fecha de
+     * otorgamiento (Information Expert — el crédito es quien conoce
+     * esa fecha) y le delega el cálculo (Strategy). El motor de
+     * cálculo (calculadora-mora.ts) no se toca para nada: la
+     * coexistencia de políticas se resuelve aquí, no ahí (OCP).
+     *
+     * @param catalogo Resuelve política plana vs. escalonada según
+     * fecha de otorgamiento (7.6). Se inyecta — Credito no conoce las
+     * políticas concretas (DIP).
+     * @param capitalEnMora Capital vencido de la cuota en mora.
+     */
+    public calcularInteresMoratorio(
+        catalogo: CatalogoPoliticas,
+        capitalEnMora: Dinero
+    ): Dinero {
+
+        if (this.diasAtraso === 0) {
+            throw new Error(
+                "Un crédito sin días de atraso no genera interés moratorio"
+            );
+        }
+
+        const politica =
+            catalogo.resolver(
+                this.fechaOtorgamiento
+            );
+
+        return politica.calcularInteresMoratorio({
+            capitalEnMora,
+            diasAtraso: this.diasAtraso
+        });
+    }
+
     public registrarPago(
-        diasAtrasoRestantes: number
+        diasAtrasoRestantes: number,
+        saldoLiquidado: boolean = false
     ): void {
 
         this.validarDias(
             diasAtrasoRestantes
         );
 
+        if (saldoLiquidado && diasAtrasoRestantes !== 0) {
+            throw new Error(
+                "Un saldo liquidado no puede dejar días de atraso pendientes"
+            );
+        }
+
         this.estado.registrarPago(
             this,
-            diasAtrasoRestantes
+            diasAtrasoRestantes,
+            saldoLiquidado
         );
     }
 
@@ -215,12 +278,22 @@ export class EstadoEnMora
 
     public registrarPago(
         credito: Credito,
-        diasAtrasoRestantes: number
+        diasAtrasoRestantes: number,
+        saldoLiquidado: boolean = false
     ): void {
 
         credito.actualizarDiasAtraso(
             diasAtrasoRestantes
         );
+
+        if (diasAtrasoRestantes === 0 && saldoLiquidado) {
+
+            credito.cambiarEstado(
+                new EstadoCancelado()
+            );
+
+            return;
+        }
 
         if (diasAtrasoRestantes === 0) {
 
