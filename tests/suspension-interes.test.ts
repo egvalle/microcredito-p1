@@ -1,85 +1,72 @@
 import { describe, expect, it } from "vitest";
 
 import { Dinero } from "../src/dominio/dinero.js";
-import { CalculadoraSuspensionInteres } from "../src/dominio/suspension-interes.js";
+import {
+    CalculadoraSuspensionInteres,
+    EstadoDevengo
+} from "../src/dominio/suspension-interes.js";
 
-describe("CP-04.2: suspensión del devengo de interés corriente a los 90 días", () => {
-
+describe("CP-04.2: suspensión y acumulación del interés corriente", () => {
     const calculadora = new CalculadoraSuspensionInteres();
-    const interesCorriente = Dinero.desdeQuetzales("278.86");
+    const cero = Dinero.desdeQuetzales("0.00");
 
-    it("reconoce el interés corriente completo hasta el día 90", () => {
+    const estadoInicial: EstadoDevengo = {
+        interesReconocido: cero,
+        interesEnSuspenso: cero
+    };
 
-        const resultado =
-            calculadora.calcularDevengo(
-                interesCorriente,
-                90
-            );
+    it("reconoce el interés nuevo hasta el día 90", () => {
+        const resultado = calculadora.registrarDevengo(
+            Dinero.desdeQuetzales("10.00"),
+            90,
+            estadoInicial
+        );
 
-        expect(resultado.interesReconocido.aDecimal())
-            .toBe("278.86");
-
-        expect(resultado.interesEnSuspenso.aDecimal())
-            .toBe("0.00");
+        expect(resultado.reconocidoEnPeriodo.aDecimal()).toBe("10.00");
+        expect(resultado.suspendidoEnPeriodo.aDecimal()).toBe("0.00");
+        expect(resultado.estado.interesReconocido.aDecimal()).toBe("10.00");
+        expect(resultado.estado.interesEnSuspenso.aDecimal()).toBe("0.00");
     });
 
-    it("suspende el devengo a partir del día 91", () => {
+    it("desde el día 91 acumula el interés nuevo en suspenso", () => {
+        const corte90 = calculadora.registrarDevengo(
+            Dinero.desdeQuetzales("10.00"),
+            90,
+            estadoInicial
+        );
 
-        const resultado =
-            calculadora.calcularDevengo(
-                interesCorriente,
-                91
-            );
+        const corte100 = calculadora.registrarDevengo(
+            Dinero.desdeQuetzales("2.00"),
+            100,
+            corte90.estado
+        );
 
-        expect(resultado.interesReconocido.aDecimal())
-            .toBe("0.00");
-
-        expect(resultado.interesEnSuspenso.aDecimal())
-            .toBe("278.86");
-    });
-
-    it("entre un corte al día 90 y otro al día 100, el ingreso reconocido no aumenta y el suspenso sí", () => {
-
-        const corte90 =
-            calculadora.calcularDevengo(
-                interesCorriente,
-                90
-            );
-
-        const corte100 =
-            calculadora.calcularDevengo(
-                interesCorriente,
-                100
-            );
-
+        expect(corte100.estado.interesReconocido.aDecimal()).toBe("10.00");
+        expect(corte100.estado.interesEnSuspenso.aDecimal()).toBe("2.00");
         expect(
-            corte100.interesReconocido.esMayorQue(
-                corte90.interesReconocido
-            )
-        ).toBe(false);
-
-        expect(
-            corte100.interesEnSuspenso.esMayorQue(
-                corte90.interesEnSuspenso
-            ) ||
-            corte100.interesEnSuspenso.igualA(
-                corte90.interesEnSuspenso
+            corte100.estado.interesEnSuspenso.esMayorQue(
+                corte90.estado.interesEnSuspenso
             )
         ).toBe(true);
     });
 
-    it("al regularizar, lo acumulado en suspenso se reconoce íntegro", () => {
+    it("al regularizar reconoce el saldo suspendido y lo deja en cero", () => {
+        const corte90 = calculadora.registrarDevengo(
+            Dinero.desdeQuetzales("10.00"),
+            90,
+            estadoInicial
+        );
 
-        const suspenso =
-            Dinero.desdeQuetzales("278.86");
+        const corte100 = calculadora.registrarDevengo(
+            Dinero.desdeQuetzales("2.00"),
+            100,
+            corte90.estado
+        );
 
-        const resultado =
-            calculadora.regularizar(suspenso);
+        const regularizacion = calculadora.regularizar(corte100.estado);
 
-        expect(resultado.interesReconocido.aDecimal())
-            .toBe("278.86");
-
-        expect(resultado.interesEnSuspenso.aDecimal())
-            .toBe("0.00");
+        expect(regularizacion.reconocidoEnPeriodo.aDecimal()).toBe("2.00");
+        expect(regularizacion.estado.interesReconocido.aDecimal()).toBe("12.00");
+        expect(regularizacion.estado.interesEnSuspenso.aDecimal()).toBe("0.00");
     });
 });

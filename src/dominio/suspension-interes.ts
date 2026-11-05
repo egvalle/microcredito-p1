@@ -1,86 +1,107 @@
 import { Dinero } from "./dinero.js";
 
-/**
- * CP-04.2 — 
- * Regla: a partir del día 91 de atraso, el crédito deja de devengar
- * interés corriente. Lo no reconocido se acumula en una cuenta de orden
- * (interesEnSuspenso), nunca como ingreso. Al regularizarse el crédito
- * (diasAtraso vuelve a 0), el devengo se reactiva y lo acumulado se
- * reconoce en el período de la regularización.
- */
-
-export interface ResultadoDevengo {
+export interface EstadoDevengo {
     interesReconocido: Dinero;
     interesEnSuspenso: Dinero;
 }
 
-export class CalculadoraSuspensionInteres {
+export interface ResultadoDevengo {
+    estado: EstadoDevengo;
+    reconocidoEnPeriodo: Dinero;
+    suspendidoEnPeriodo: Dinero;
+}
 
+export interface ResultadoRegularizacion {
+    estado: EstadoDevengo;
+    reconocidoEnPeriodo: Dinero;
+}
+
+export class CalculadoraSuspensionInteres {
     private static readonly DIA_LIMITE_DEVENGO = 90;
 
     /**
-     * Decide, para una cuota vencida con un interés corriente ya
-     * calculado (tabla de amortización), cuánto se reconoce como
-     * ingreso del período y cuánto se suspende.
+     * Registra el interés nuevo de un período.
+     *
+     * Hasta el día 90 se reconoce como ingreso.
+     * Desde el día 91 se acumula en suspenso.
      */
-    public calcularDevengo(
-        interesCorriente: Dinero,
-        diasAtraso: number
+    public registrarDevengo(
+        interesCorrienteDelPeriodo: Dinero,
+        diasAtraso: number,
+        estadoAnterior: EstadoDevengo
     ): ResultadoDevengo {
-
         this.validarDias(diasAtraso);
+        this.validarMonto(interesCorrienteDelPeriodo);
 
-        const cero =
-            Dinero.desdeCentavos(
-                0n,
-                interesCorriente.obtenerMoneda()
-            );
+        const cero = Dinero.desdeCentavos(
+            0n,
+            interesCorrienteDelPeriodo.obtenerMoneda()
+        );
 
-        if (
-            diasAtraso <=
-            CalculadoraSuspensionInteres
-                .DIA_LIMITE_DEVENGO
-        ) {
+        if (diasAtraso <= CalculadoraSuspensionInteres.DIA_LIMITE_DEVENGO) {
+            const estado: EstadoDevengo = {
+                interesReconocido: estadoAnterior.interesReconocido.sumar(
+                    interesCorrienteDelPeriodo
+                ),
+                interesEnSuspenso: estadoAnterior.interesEnSuspenso
+            };
+
             return {
-                interesReconocido: interesCorriente,
-                interesEnSuspenso: cero
+                estado,
+                reconocidoEnPeriodo: interesCorrienteDelPeriodo,
+                suspendidoEnPeriodo: cero
             };
         }
 
+        const estado: EstadoDevengo = {
+            interesReconocido: estadoAnterior.interesReconocido,
+            interesEnSuspenso: estadoAnterior.interesEnSuspenso.sumar(
+                interesCorrienteDelPeriodo
+            )
+        };
+
         return {
-            interesReconocido: cero,
-            interesEnSuspenso: interesCorriente
+            estado,
+            reconocidoEnPeriodo: cero,
+            suspendidoEnPeriodo: interesCorrienteDelPeriodo
         };
     }
 
     /**
-     * Al regularizarse el crédito, lo acumulado en interesEnSuspenso
-     * se reconoce íntegro en el período de la regularización.
+     * Al regularizar, reconoce el saldo suspendido y lo deja en cero.
      */
     public regularizar(
-        interesEnSuspensoAcumulado: Dinero
-    ): ResultadoDevengo {
-
-        const cero =
-            Dinero.desdeCentavos(
-                0n,
-                interesEnSuspensoAcumulado.obtenerMoneda()
-            );
+        estadoAnterior: EstadoDevengo
+    ): ResultadoRegularizacion {
+        const suspendido = estadoAnterior.interesEnSuspenso;
+        const cero = Dinero.desdeCentavos(
+            0n,
+            suspendido.obtenerMoneda()
+        );
 
         return {
-            interesReconocido: interesEnSuspensoAcumulado,
-            interesEnSuspenso: cero
+            estado: {
+                interesReconocido: estadoAnterior.interesReconocido.sumar(
+                    suspendido
+                ),
+                interesEnSuspenso: cero
+            },
+            reconocidoEnPeriodo: suspendido
         };
     }
 
     private validarDias(diasAtraso: number): void {
-
-        if (
-            !Number.isInteger(diasAtraso) ||
-            diasAtraso < 0
-        ) {
+        if (!Number.isInteger(diasAtraso) || diasAtraso < 0) {
             throw new Error(
                 "Los días de atraso deben ser un entero mayor o igual a cero"
+            );
+        }
+    }
+
+    private validarMonto(interes: Dinero): void {
+        if (interes.esNegativo()) {
+            throw new Error(
+                "El interés corriente del período no puede ser negativo"
             );
         }
     }

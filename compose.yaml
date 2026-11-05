@@ -1,0 +1,53 @@
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: credito-vecino-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-credito_vecino}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Define POSTGRES_PASSWORD en .env}
+    ports:
+      - "5434:5432"
+    volumes:
+      - credito_vecino_postgres:/var/lib/postgresql/data
+
+  ollama:
+    image: ollama/ollama:latest
+    container_name: credito-vecino-ollama
+    profiles: ["ia"]
+    ports:
+      - "11434:11434"
+    volumes:
+      - credito_vecino_ollama:/root/.ollama
+
+  app:
+    build: .
+    profiles: ["movil"]
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-credito_vecino}
+      HOST: 0.0.0.0
+      APP_BASIC_USER: ${APP_BASIC_USER:-}
+      APP_BASIC_PASSWORD: ${APP_BASIC_PASSWORD:-}
+    depends_on:
+      - postgres
+
+  caddy:
+    image: caddy:2-alpine
+    profiles: ["movil"]
+    environment:
+      CV_LAN_HOST: ${CV_LAN_HOST:-127.0.0.1}
+    ports:
+      - "8443:8443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - credito_vecino_caddy_data:/data
+      - credito_vecino_caddy_config:/config
+    depends_on:
+      - app
+
+volumes:
+  credito_vecino_postgres:
+  credito_vecino_ollama:
+  credito_vecino_caddy_data:
+  credito_vecino_caddy_config:

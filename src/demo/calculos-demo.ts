@@ -52,6 +52,8 @@ escribir("Demostración del núcleo de cálculos");
 
 titulo("1. PLAN DE AMORTIZACIÓN - MÉTODO FRANCÉS");
 
+const saldoPendienteDemo = Dinero.desdeQuetzales("100.00");
+
 const estrategia =
     new AmortizacionFrancesa();
 
@@ -484,7 +486,11 @@ escribir(
     }`
 );
 
-creditoDemo.registrarPago(10);
+creditoDemo.registrarPago({
+    diasAtrasoRestantes: 10,
+    saldoPendiente: saldoPendienteDemo,
+    cuotasVencidasPendientes: 1
+});
 
 escribir(
     `Pago parcial -> 10 días -> ${
@@ -494,7 +500,11 @@ escribir(
     }`
 );
 
-creditoDemo.registrarPago(0);
+creditoDemo.registrarPago({
+    diasAtrasoRestantes: 0,
+    saldoPendiente: saldoPendienteDemo,
+    cuotasVencidasPendientes: 0
+});
 
 escribir(
     `Pago total de lo vencido -> ${

@@ -1,0 +1,4 @@
+{$CV_LAN_HOST}:8443 {
+    tls internal
+    reverse_proxy app:3000
+}
