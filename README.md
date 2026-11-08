@@ -1,6 +1,6 @@
 # Crédito Vecino — Sistema de Gestión de Microcrédito
 
-Proyecto académico de **Análisis de Sistemas II**, Universidad Mariano Gálvez de Guatemala. La aplicación permite gestionar clientes, solicitudes y créditos; consultar cartera y mora; registrar pagos; trabajar con operaciones sin conexión desde la PWA; y consultar documentos del proyecto mediante un chat gerencial con IA.
+Proyecto de **Análisis de Sistemas II**. La aplicación permite gestionar clientes, solicitudes y créditos; consultar cartera y mora; registrar pagos; trabajar con operaciones sin conexión desde la PWA; y consultar documentos del proyecto mediante un chat gerencial con IA.
 
 ## Tecnologías implementadas
 
